@@ -1,8 +1,7 @@
-import { Link, useSearchParams, useLocation } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
-function Header({ darkMode, onToggleDark, isAdmin }) {
+function Header({ darkMode, onToggleDark, isAdmin, onLogout }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const location = useLocation();
   const section = searchParams.get('section') || 'inscope';
 
   const handleSectionToggle = (value) => {
@@ -57,10 +56,11 @@ function Header({ darkMode, onToggleDark, isAdmin }) {
             </svg>
           )}
         </button>
-        {isAdmin ? (
+        {isAdmin && (
           <Link to="/" className="header-nav-link">View Docs</Link>
-        ) : (
-          <Link to="/admin" className="header-nav-link">Admin</Link>
+        )}
+        {isAdmin && onLogout && (
+          <button className="header-logout-btn" onClick={onLogout}>Logout</button>
         )}
         <span className="header-title">Migration Docs</span>
       </div>

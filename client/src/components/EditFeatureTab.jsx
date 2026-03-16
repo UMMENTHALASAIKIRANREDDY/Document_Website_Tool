@@ -12,7 +12,7 @@ function EditFeatureTab({ refreshKey, onChanged }) {
   const [combination, setCombination] = useState('');
   const [features, setFeatures] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [savingId, setSavingId] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -32,6 +32,7 @@ function EditFeatureTab({ refreshKey, onChanged }) {
   const fetchFiltered = async () => {
     setLoading(true);
     setError('');
+    setSuccessMsg('');
     const cacheKey = getEditCacheKey(productType, scope, combination);
     try {
       const params = new URLSearchParams({ productType, scope });
@@ -86,51 +87,53 @@ function EditFeatureTab({ refreshKey, onChanged }) {
     return data.paths;
   };
 
-  const handleSave = async (feature, index) => {
-    if (!feature.name.trim()) {
-      setError('Feature name is required.');
+  const handleSaveAll = async () => {
+    const dirtyFeatures = features.filter(f => f._dirty);
+    if (dirtyFeatures.length === 0) {
+      setError('No changes to save.');
       return;
     }
 
-    setSavingId(feature.id);
+    setSaving(true);
     setError('');
     setSuccessMsg('');
+    let savedCount = 0;
 
     try {
-      let screenshotPaths = [...(feature.screenshots || [])];
-      if (feature._pendingFiles && feature._pendingFiles.length > 0) {
-        const uploaded = await uploadScreenshots(feature._pendingFiles, feature.name.trim());
-        screenshotPaths = [...screenshotPaths, ...uploaded];
+      for (let i = 0; i < features.length; i++) {
+        const feature = features[i];
+        if (!feature._dirty) continue;
+        if (!feature.name.trim()) continue;
+
+        let screenshotPaths = [...(feature.screenshots || [])];
+        if (feature._pendingFiles && feature._pendingFiles.length > 0) {
+          const uploaded = await uploadScreenshots(feature._pendingFiles, feature.name.trim());
+          screenshotPaths = [...screenshotPaths, ...uploaded];
+        }
+
+        const res = await fetch(`/api/features/${feature.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: feature.name.trim(),
+            description: (feature.description || '').trim(),
+            family: (feature.family || '').trim(),
+            screenshots: screenshotPaths,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        savedCount++;
       }
 
-      const res = await fetch(`/api/features/${feature.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: feature.name.trim(),
-          description: (feature.description || '').trim(),
-          family: (feature.family || '').trim(),
-          screenshots: screenshotPaths,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
-      setSuccessMsg(`"${feature.name}" updated successfully!`);
-      setTimeout(() => setSuccessMsg(''), 3000);
-
-      setFeatures(prev => prev.map((f, i) =>
-        i === index
-          ? { ...f, screenshots: screenshotPaths, _pendingFiles: [], _localPreviews: [], _dirty: false }
-          : f
-      ));
-
+      setSuccessMsg(`${savedCount} feature${savedCount !== 1 ? 's' : ''} updated successfully!`);
       if (onChanged) onChanged();
+      fetchFiltered();
     } catch (err) {
       setError('Update failed: ' + err.message);
     }
 
-    setSavingId(null);
+    setSaving(false);
   };
 
   const handleDelete = async (id) => {
@@ -146,6 +149,8 @@ function EditFeatureTab({ refreshKey, onChanged }) {
       setError('Delete failed: ' + err.message);
     }
   };
+
+  const dirtyCount = features.filter(f => f._dirty).length;
 
   return (
     <div className="scope-form">
@@ -229,43 +234,49 @@ function EditFeatureTab({ refreshKey, onChanged }) {
               {combination ? ` / ${combination}` : ''}.
             </div>
           ) : (
-            <div className="edit-features-list">
-              {features.map((feature, idx) => (
-                <div key={feature.id} className="edit-feature-wrapper">
-                  <FeatureCard
-                    feature={feature}
-                    index={idx}
-                    onChange={handleFeatureChange}
-                    onRemove={() => {}}
-                    showRemove={false}
-                  />
-                  <div className="edit-feature-actions">
-                    <button
-                      className="btn-save btn-save-sm"
-                      onClick={() => handleSave(feature, idx)}
-                      disabled={savingId === feature.id || isOffline}
-                    >
-                      {savingId === feature.id ? 'Saving...' : 'Save Changes'}
-                    </button>
-                    {deleteConfirm === feature.id ? (
-                      <div className="delete-confirm">
-                        <span>Delete this feature?</span>
-                        <button className="btn-yes" onClick={() => handleDelete(feature.id)}>Yes</button>
-                        <button className="btn-no" onClick={() => setDeleteConfirm(null)}>No</button>
-                      </div>
-                    ) : (
-                      <button
-                        className="btn-delete"
-                        onClick={() => setDeleteConfirm(feature.id)}
-                        disabled={isOffline}
-                      >
-                        Delete
-                      </button>
-                    )}
+            <>
+              <div className="edit-features-list">
+                {features.map((feature, idx) => (
+                  <div key={feature.id} className="edit-feature-wrapper">
+                    <FeatureCard
+                      feature={feature}
+                      index={idx}
+                      onChange={handleFeatureChange}
+                      onRemove={() => {}}
+                      showRemove={false}
+                    />
+                    <div className="edit-feature-actions">
+                      {deleteConfirm === feature.id ? (
+                        <div className="delete-confirm">
+                          <span>Delete this feature?</span>
+                          <button className="btn-yes" onClick={() => handleDelete(feature.id)}>Yes</button>
+                          <button className="btn-no" onClick={() => setDeleteConfirm(null)}>No</button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn-delete"
+                          onClick={() => setDeleteConfirm(feature.id)}
+                          disabled={isOffline}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="btn-save"
+                  onClick={handleSaveAll}
+                  disabled={saving || isOffline || dirtyCount === 0}
+                >
+                  {saving ? 'Saving...' : `Save All Changes${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
+                </button>
+              </div>
+            </>
           )}
         </>
       )}

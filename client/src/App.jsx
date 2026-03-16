@@ -4,9 +4,71 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import FeatureTable from './components/FeatureTable';
 import AdminPage from './components/AdminPage';
+import ExportPage from './components/ExportPage';
+import AdminLogin from './components/AdminLogin';
+
+function AdminRoute({ darkMode, setDarkMode }) {
+  const [token, setToken] = useState(sessionStorage.getItem('admin_token') || '');
+  const [verified, setVerified] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    if (!token) {
+      setChecking(false);
+      setVerified(false);
+      return;
+    }
+    fetch('/api/admin/verify', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => {
+        if (res.ok) {
+          setVerified(true);
+        } else {
+          sessionStorage.removeItem('admin_token');
+          setToken('');
+          setVerified(false);
+        }
+      })
+      .catch(() => {
+        setVerified(false);
+      })
+      .finally(() => setChecking(false));
+  }, [token]);
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('admin_token');
+    setToken('');
+    setVerified(false);
+  };
+
+  if (checking) {
+    return (
+      <div className="admin-login-page">
+        <div className="admin-login-card" style={{ textAlign: 'center', padding: 48 }}>
+          Verifying session...
+        </div>
+      </div>
+    );
+  }
+
+  if (!verified) {
+    return <AdminLogin onLogin={(t) => setToken(t)} />;
+  }
+
+  return (
+    <>
+      <Header darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} isAdmin={true} onLogout={handleLogout} />
+      <div className="app-body">
+        <AdminPage />
+      </div>
+    </>
+  );
+}
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);
+  const [showExport, setShowExport] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
@@ -17,14 +79,7 @@ function App() {
       <Routes>
         <Route
           path="/admin"
-          element={
-            <>
-              <Header darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} isAdmin={true} />
-              <div className="app-body">
-                <AdminPage />
-              </div>
-            </>
-          }
+          element={<AdminRoute darkMode={darkMode} setDarkMode={setDarkMode} />}
         />
         <Route
           path="/"
@@ -32,9 +87,13 @@ function App() {
             <>
               <Header darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} isAdmin={false} />
               <div className="app-body">
-                <Sidebar />
+                <Sidebar onShowExport={setShowExport} showingExport={showExport} />
                 <main className="main-content">
-                  <FeatureTable />
+                  {showExport ? (
+                    <ExportPage onBack={() => setShowExport(false)} />
+                  ) : (
+                    <FeatureTable />
+                  )}
                 </main>
               </div>
             </>

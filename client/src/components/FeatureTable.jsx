@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import SearchBar from './SearchBar';
 import FilterTags from './FilterTags';
+import DocumentView from './DocumentView';
 
 function WelcomePage() {
   return (
@@ -37,6 +38,40 @@ function WelcomePage() {
   );
 }
 
+function ScreenshotLightbox({ src, onClose }) {
+  const [zoom, setZoom] = useState(1);
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    setZoom(prev => Math.max(0.5, Math.min(4, prev + (e.deltaY > 0 ? -0.15 : 0.15))));
+  }, []);
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="lightbox-overlay" onClick={onClose}>
+      <div className="lightbox-controls">
+        <button onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(4, z + 0.25)); }} title="Zoom in">+</button>
+        <span>{Math.round(zoom * 100)}%</span>
+        <button onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(0.5, z - 0.25)); }} title="Zoom out">&minus;</button>
+        <button onClick={onClose} title="Close">&times;</button>
+      </div>
+      <div className="lightbox-content" onClick={(e) => e.stopPropagation()} onWheel={handleWheel}>
+        <img
+          src={src}
+          alt="Screenshot preview"
+          style={{ transform: `scale(${zoom})` }}
+          draggable={false}
+        />
+      </div>
+    </div>
+  );
+}
+
 function getCacheKey(productType, combination, section, search, activeTag) {
   return `features_cache_${productType}_${combination}_${section}_${search}_${activeTag}`;
 }
@@ -54,11 +89,18 @@ function FeatureTable() {
   const [loading, setLoading] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [showDocView, setShowDocView] = useState(false);
 
   const showWelcome = !productType && !combination;
 
   useEffect(() => {
     setExpandedRow(null);
+    setShowDocView(false);
+    setActiveTag('All');
+  }, [productType, combination, section]);
+
+  useEffect(() => {
     if (!showWelcome) {
       fetchFeatures();
     }
@@ -83,7 +125,7 @@ function FeatureTable() {
 
       try {
         localStorage.setItem(cacheKey, JSON.stringify(data));
-      } catch (_) { /* quota exceeded — ignore */ }
+      } catch (_) { /* quota exceeded */ }
     } catch (err) {
       console.error('Failed to fetch features:', err);
       const cached = localStorage.getItem(cacheKey);
@@ -105,7 +147,21 @@ function FeatureTable() {
     return <WelcomePage />;
   }
 
-  const scopeLabel = section === 'inscope' ? 'Supported Features' : 'Out of Scope Features';
+  const scopeLabel = combination || productType || '';
+
+  if (showDocView) {
+    return (
+      <div className="feature-table-container">
+        <DocumentView
+          features={features}
+          productType={productType}
+          combination={combination}
+          section={section}
+          onBack={() => setShowDocView(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="feature-table-container">
@@ -114,10 +170,22 @@ function FeatureTable() {
           Server is offline — showing cached data. Changes will sync when the server is back.
         </div>
       )}
-      <h1 className="page-title">
-        {scopeLabel}
-        {combination && <span className="page-subtitle"> — {combination}</span>}
-      </h1>
+      <div className="page-title-row">
+        <h1 className="page-title">
+          {scopeLabel}
+        </h1>
+        {features.length > 0 && (
+          <button className="btn-doc-view" onClick={() => setShowDocView(true)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            View Document Format
+          </button>
+        )}
+      </div>
 
       <SearchBar value={search} onChange={setSearch} />
       <FilterTags tags={tags} activeTag={activeTag} onTagClick={setActiveTag} />
@@ -179,9 +247,12 @@ function FeatureTable() {
                           <div className="screenshot-expand-content">
                             {feature.screenshots.map((src, idx) => (
                               <div key={idx} className="screenshot-expand-item">
-                                <a href={src} target="_blank" rel="noopener noreferrer">
-                                  <img src={src} alt={`Screenshot ${idx + 1}`} />
-                                </a>
+                                <img
+                                  src={src}
+                                  alt={`Screenshot ${idx + 1}`}
+                                  onClick={() => setLightboxSrc(src)}
+                                  style={{ cursor: 'pointer' }}
+                                />
                               </div>
                             ))}
                           </div>
@@ -195,6 +266,10 @@ function FeatureTable() {
           </tbody>
         </table>
       </div>
+
+      {lightboxSrc && (
+        <ScreenshotLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      )}
     </div>
   );
 }

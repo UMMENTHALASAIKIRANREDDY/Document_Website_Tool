@@ -28,3 +28,9 @@ export const COMBINATIONS_BY_PRODUCT = {
     'OneDrive to SPO',
   ],
 };
+
+export const FEATURE_LIST_URLS = {
+  Message: 'https://cloudfuzecom-my.sharepoint.com/:x:/g/personal/bhuvana_mosra_cloudfuze_com/IQBw8o6KU3A5TKl4fifiRa17AR-FGG1MzGW0pbeIDXI-GXM?e=yGrOId',
+  Mail: '',
+  Content: '',
+};
