@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import FeatureCard from './FeatureCard';
 import { useProductConfig } from '../ProductConfigContext';
 import CustomSelect from './CustomSelect';
+import { showToast } from './Toast';
 
 const emptyFeature = () => ({
   name: '',
@@ -15,13 +16,11 @@ const emptyFeature = () => ({
 function FeatureScopeForm({ onSaved }) {
   const { productTypes, combinationsByProduct, configs, refresh } = useProductConfig();
 
-  const [scope, setScope] = useState('');
   const [productType, setProductType] = useState('');
+  const [scope, setScope] = useState('');
   const [combination, setCombination] = useState('');
   const [features, setFeatures] = useState([emptyFeature()]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const [showNewPT, setShowNewPT] = useState(false);
   const [newPTName, setNewPTName] = useState('');
@@ -33,24 +32,24 @@ function FeatureScopeForm({ onSaved }) {
 
   const combinations = productType ? (combinationsByProduct[productType] || []) : [];
 
-  const ptSectionRef = useRef(null);
+  const scopeSectionRef = useRef(null);
   const comboSectionRef = useRef(null);
   const featuresSectionRef = useRef(null);
 
   useEffect(() => {
-    if (scope && ptSectionRef.current) {
-      ptSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [scope]);
-
-  useEffect(() => {
-    if (productType && comboSectionRef.current) {
-      comboSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (productType && scopeSectionRef.current) {
+      scopeSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [productType]);
 
   useEffect(() => {
-    if (productType && featuresSectionRef.current) {
+    if (scope && comboSectionRef.current) {
+      comboSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [scope]);
+
+  useEffect(() => {
+    if (scope && featuresSectionRef.current) {
       setTimeout(() => {
         featuresSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 100);
@@ -91,9 +90,8 @@ function FeatureScopeForm({ onSaved }) {
   };
 
   const handleCreateProductType = async () => {
-    if (!newPTName.trim()) { setError('Product type name is required.'); return; }
+    if (!newPTName.trim()) { showToast('Product type name is required.', 'error'); return; }
     setSavingPT(true);
-    setError('');
     try {
       const res = await fetch('/api/product-config', {
         method: 'POST',
@@ -104,20 +102,19 @@ function FeatureScopeForm({ onSaved }) {
       if (!res.ok) throw new Error(data.error);
       await refresh();
       setProductType(newPTName.trim());
-      setSuccess(`Product type "${newPTName.trim()}" created!`);
+      showToast(`Product type "${newPTName.trim()}" created!`);
       cancelNewPT();
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     }
     setSavingPT(false);
   };
 
   const handleCreateCombination = async () => {
-    if (!newComboName.trim()) { setError('Combination name is required.'); return; }
+    if (!newComboName.trim()) { showToast('Combination name is required.', 'error'); return; }
     const config = configs.find(c => c.name === productType);
-    if (!config) { setError('Select a product type first.'); return; }
+    if (!config) { showToast('Select a product type first.', 'error'); return; }
     setSavingCombo(true);
-    setError('');
     try {
       const res = await fetch(`/api/product-config/${config.id}/combinations`, {
         method: 'POST',
@@ -128,24 +125,21 @@ function FeatureScopeForm({ onSaved }) {
       if (!res.ok) throw new Error(data.error);
       await refresh();
       setCombination(newComboName.trim());
-      setSuccess(`Combination "${newComboName.trim()}" created!`);
+      showToast(`Combination "${newComboName.trim()}" created!`);
       cancelNewCombo();
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     }
     setSavingCombo(false);
   };
 
   const handleSave = async () => {
-    setError('');
-    setSuccess('');
-
-    if (!scope) { setError('Please select a Scope Status.'); return; }
-    if (!productType) { setError('Please select a Product Type.'); return; }
-    if (combinations.length > 0 && !combination) { setError('Please select a Combination.'); return; }
+    if (!productType) { showToast('Please select a Product Type.', 'error'); return; }
+    if (!scope) { showToast('Please select a Scope Status.', 'error'); return; }
+    if (combinations.length > 0 && !combination) { showToast('Please select a Combination.', 'error'); return; }
 
     const validFeatures = features.filter(f => f.name.trim());
-    if (validFeatures.length === 0) { setError('Please add at least one feature with a name.'); return; }
+    if (validFeatures.length === 0) { showToast('Please add at least one feature with a name.', 'error'); return; }
 
     setSaving(true);
 
@@ -178,23 +172,21 @@ function FeatureScopeForm({ onSaved }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      setSuccess(`${data.count} feature(s) saved successfully!`);
-      setFeatures([emptyFeature()]);
+      showToast(`${data.count} feature(s) saved successfully!`);
+      resetForm();
       if (onSaved) onSaved();
     } catch (err) {
-      setError('Save failed: ' + err.message);
+      showToast('Save failed: ' + err.message, 'error');
     }
 
     setSaving(false);
   };
 
   const resetForm = () => {
-    setScope('');
     setProductType('');
+    setScope('');
     setCombination('');
     setFeatures([emptyFeature()]);
-    setError('');
-    setSuccess('');
     cancelNewPT();
     cancelNewCombo();
   };
@@ -203,69 +195,72 @@ function FeatureScopeForm({ onSaved }) {
     <div className="scope-form">
       <h2 className="scope-form-title">Add Features</h2>
 
+      {/* Step 1: Product Type */}
       <div className="form-section">
         <div className="form-group">
-          <label>Scope Status <span className="required">*</span></label>
-          <CustomSelect
-            value={scope}
-            onChange={(e) => { setScope(e.target.value); setSuccess(''); }}
-            options={[
-              { value: 'inscope', label: 'In Scope' },
-              { value: 'outscope', label: 'Out of Scope' },
-            ]}
-            placeholder="-- Select Scope --"
-          />
+          <label>Product Type <span className="required">*</span></label>
+          <div className="select-with-action">
+            <CustomSelect
+              value={productType}
+              onChange={(e) => { setProductType(e.target.value); setScope(''); setCombination(''); cancelNewPT(); }}
+              options={productTypes.map(pt => ({ value: pt, label: pt }))}
+              placeholder="-- Select Product Type --"
+            />
+            {!showNewPT && (
+              <button className="btn-create-new" onClick={() => setShowNewPT(true)} title="Create new product type">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New Product Type
+              </button>
+            )}
+          </div>
         </div>
+        {showNewPT && (
+          <div className="inline-create-form">
+            <input
+              type="text"
+              value={newPTName}
+              onChange={(e) => setNewPTName(e.target.value)}
+              placeholder="Enter new product type name"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateProductType()}
+              autoFocus
+            />
+            <button className="btn-create-action" onClick={handleCreateProductType} disabled={savingPT}>
+              {savingPT ? 'Creating...' : 'Create'}
+            </button>
+            <button className="btn-cancel-action" onClick={cancelNewPT}>
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
-      {scope && (
-        <div className="form-section" ref={ptSectionRef}>
+      {/* Step 2: Scope (shown after product type) */}
+      {productType && (
+        <div className="form-section" ref={scopeSectionRef}>
           <div className="form-group">
-            <label>Product Type <span className="required">*</span></label>
-            <div className="select-with-action">
-              <CustomSelect
-                value={productType}
-                onChange={(e) => { setProductType(e.target.value); setCombination(''); setSuccess(''); cancelNewPT(); }}
-                options={productTypes.map(pt => ({ value: pt, label: pt }))}
-                placeholder="-- Select Product Type --"
-              />
-              {!showNewPT && (
-                <button className="btn-create-new" onClick={() => setShowNewPT(true)} title="Create new product type">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  New Product Type
-                </button>
-              )}
-            </div>
+            <label>Scope Status <span className="required">*</span></label>
+            <CustomSelect
+              value={scope}
+              onChange={(e) => { setScope(e.target.value); setCombination(''); }}
+              options={[
+                { value: 'inscope', label: 'In Scope' },
+                { value: 'outscope', label: 'Out of Scope' },
+              ]}
+              placeholder="-- Select Scope --"
+            />
           </div>
-          {showNewPT && (
-            <div className="inline-create-form">
-              <input
-                type="text"
-                value={newPTName}
-                onChange={(e) => setNewPTName(e.target.value)}
-                placeholder="Enter new product type name"
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateProductType()}
-                autoFocus
-              />
-              <button className="btn-create-action" onClick={handleCreateProductType} disabled={savingPT}>
-                {savingPT ? 'Creating...' : 'Create'}
-              </button>
-              <button className="btn-cancel-action" onClick={cancelNewPT}>
-                Cancel
-              </button>
-            </div>
-          )}
         </div>
       )}
 
-      {scope && productType && (
+      {/* Step 3: Combination (shown after scope) */}
+      {productType && scope && (
         <div className="form-section" ref={comboSectionRef}>
           <div className="form-group">
             <label>Combination</label>
             <div className="select-with-action">
               <CustomSelect
                 value={combination}
-                onChange={(e) => { setCombination(e.target.value); setSuccess(''); cancelNewCombo(); }}
+                onChange={(e) => { setCombination(e.target.value); cancelNewCombo(); }}
                 options={combinations.map(c => ({ value: c, label: c }))}
                 placeholder="-- Select Combination --"
               />
@@ -298,7 +293,8 @@ function FeatureScopeForm({ onSaved }) {
         </div>
       )}
 
-      {scope && productType && (
+      {/* Step 4: Features (shown after scope is selected) */}
+      {productType && scope && (
         <div ref={featuresSectionRef}>
           <div className="form-section-header">
             <span className="scope-badge" data-scope={scope}>
@@ -324,9 +320,6 @@ function FeatureScopeForm({ onSaved }) {
           <button type="button" className="btn-add-feature" onClick={addFeature}>
             + Add Another Feature
           </button>
-
-          {error && <div className="form-error">{error}</div>}
-          {success && <div className="form-success">{success}</div>}
 
           <div className="form-actions">
             <button

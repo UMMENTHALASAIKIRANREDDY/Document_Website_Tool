@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import CustomSelect from './CustomSelect';
+import { showToast } from './Toast';
 
 function CompatibilityAdmin({ onChanged }) {
   const [matrices, setMatrices] = useState([]);
@@ -8,8 +9,6 @@ function CompatibilityAdmin({ onChanged }) {
   const [mode, setMode] = useState('select');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const [name, setName] = useState('');
@@ -20,6 +19,7 @@ function CompatibilityAdmin({ onChanged }) {
   const [pasteText, setPasteText] = useState('');
   const [importMode, setImportMode] = useState('none');
   const [parsedPreview, setParsedPreview] = useState(null);
+  const [showReorder, setShowReorder] = useState(false);
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const matrixDragItem = useRef(null);
@@ -46,7 +46,6 @@ function CompatibilityAdmin({ onChanged }) {
   const loadMatrix = async (id) => {
     if (!id) return;
     setLoading(true);
-    setError('');
     try {
       const m = matrices.find(x => x._id === id || x.slug === id);
       if (!m) throw new Error('Not found');
@@ -61,7 +60,7 @@ function CompatibilityAdmin({ onChanged }) {
       setSelectedId(mx.id || mx._id);
       setMode('edit');
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     }
     setLoading(false);
   };
@@ -75,8 +74,6 @@ function CompatibilityAdmin({ onChanged }) {
     setPasteText('');
     setImportMode('none');
     setParsedPreview(null);
-    setError('');
-    setSuccessMsg('');
     setDeleteConfirm(false);
   };
 
@@ -127,7 +124,7 @@ function CompatibilityAdmin({ onChanged }) {
   // --- Parse tabular data (from paste or Excel) ---
   const parseTabularData = (lines) => {
     if (lines.length < 2) {
-      setError('Need at least a header row and one data row.');
+      showToast('Need at least a header row and one data row.', 'error');
       return null;
     }
     const headerRow = lines[0];
@@ -141,7 +138,7 @@ function CompatibilityAdmin({ onChanged }) {
     const parsedCols = lastNonEmpty >= 0 ? allCols.slice(0, lastNonEmpty + 1) : [];
 
     if (parsedCols.length === 0) {
-      setError('No columns found in the header row.');
+      showToast('No columns found in the header row.', 'error');
       return null;
     }
 
@@ -155,7 +152,7 @@ function CompatibilityAdmin({ onChanged }) {
     }
 
     if (parsedRows.length === 0) {
-      setError('No valid rows found.');
+      showToast('No valid rows found.', 'error');
       return null;
     }
 
@@ -168,14 +165,13 @@ function CompatibilityAdmin({ onChanged }) {
     setImportMode('none');
     setPasteText('');
     setParsedPreview(null);
-    setError('');
-    setSuccessMsg(`Imported ${result.rows.length} rows and ${result.columns.length} columns.`);
+    showToast(`Imported ${result.rows.length} rows and ${result.columns.length} columns.`);
   };
 
   // --- Paste from clipboard ---
   const parsePaste = () => {
     if (!pasteText.trim()) {
-      setError('Please paste some data first.');
+      showToast('Please paste some data first.', 'error');
       return;
     }
     const lines = pasteText.trim().split('\n').map(line => line.split('\t'));
@@ -189,7 +185,6 @@ function CompatibilityAdmin({ onChanged }) {
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    setError('');
 
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -205,7 +200,7 @@ function CompatibilityAdmin({ onChanged }) {
           applyResult(result);
         }
       } catch (err) {
-        setError('Failed to parse Excel file: ' + err.message);
+        showToast('Failed to parse Excel file: ' + err.message, 'error');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -218,13 +213,11 @@ function CompatibilityAdmin({ onChanged }) {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { setError('Matrix name is required.'); return; }
-    if (columns.length === 0) { setError('Add at least one column.'); return; }
-    if (rows.length === 0) { setError('Add at least one row.'); return; }
+    if (!name.trim()) { showToast('Matrix name is required.', 'error'); return; }
+    if (columns.length === 0) { showToast('Add at least one column.', 'error'); return; }
+    if (rows.length === 0) { showToast('Add at least one row.', 'error'); return; }
 
     setSaving(true);
-    setError('');
-    setSuccessMsg('');
 
     try {
       const body = {
@@ -261,9 +254,9 @@ function CompatibilityAdmin({ onChanged }) {
       if (onChanged) onChanged();
       resetForm();
       setMode('select');
-      setSuccessMsg(msg);
+      showToast(msg);
     } catch (err) {
-      setError('Save failed: ' + err.message);
+      showToast('Save failed: ' + err.message, 'error');
     }
     setSaving(false);
   };
@@ -285,11 +278,10 @@ function CompatibilityAdmin({ onChanged }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderedIds }),
       });
-      setSuccessMsg('Matrix order updated.');
-      setTimeout(() => setSuccessMsg(''), 2000);
+      showToast('Matrix order updated.');
       if (onChanged) onChanged();
     } catch (err) {
-      setError('Reorder failed: ' + err.message);
+      showToast('Reorder failed: ' + err.message, 'error');
       fetchMatrices();
     }
   };
@@ -298,13 +290,13 @@ function CompatibilityAdmin({ onChanged }) {
     if (!selectedId) return;
     try {
       await fetch(`/api/compatibility/${selectedId}`, { method: 'DELETE' });
-      setSuccessMsg('Matrix deleted.');
+      showToast('Matrix deleted.');
       fetchMatrices();
       resetForm();
       setMode('select');
       if (onChanged) onChanged();
     } catch (err) {
-      setError('Delete failed: ' + err.message);
+      showToast('Delete failed: ' + err.message, 'error');
     }
     setDeleteConfirm(false);
   };
@@ -313,11 +305,11 @@ function CompatibilityAdmin({ onChanged }) {
     <div className="scope-form">
       <h2 className="scope-form-title">Compatibility Matrix</h2>
 
-      {successMsg && <div className="form-success">{successMsg}</div>}
-      {error && <div className="form-error">{error}</div>}
-
       {mode === 'select' && (
         <div className="compat-admin-select">
+          <div className="form-actions" style={{ marginBottom: 16 }}>
+            <button className="btn-save" onClick={startNew}>+ Create New Matrix</button>
+          </div>
           <div className="form-section">
             <div className="form-group">
               <label>Select an existing matrix to edit</label>
@@ -330,27 +322,32 @@ function CompatibilityAdmin({ onChanged }) {
             </div>
           </div>
           {matrices.length > 1 && (
-            <div className="reorder-list">
-              <label className="reorder-label">Matrix Order <span className="drag-hint-inline">(drag to reorder)</span></label>
-              {matrices.map((m, idx) => (
-                <div
-                  key={m._id}
-                  className="reorder-item"
-                  draggable
-                  onDragStart={() => { matrixDragItem.current = idx; }}
-                  onDragEnter={() => { matrixDragOver.current = idx; }}
-                  onDragOver={e => e.preventDefault()}
-                  onDragEnd={handleMatrixDragEnd}
-                >
-                  <span className="drag-dots reorder-drag-handle">⠿</span>
-                  <span className="reorder-item-name">{idx + 1}. {m.name}</span>
+            <div className="reorder-toggle-section">
+              <button className="btn-reorder-toggle" onClick={() => setShowReorder(prev => !prev)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><polyline points="10 3 8 6 6 3"/><polyline points="14 21 16 18 18 21"/></svg>
+                {showReorder ? 'Hide Reorder' : 'Reorder Matrices'}
+              </button>
+              {showReorder && (
+                <div className="reorder-list">
+                  <label className="reorder-label">Matrix Order <span className="drag-hint-inline">(drag to reorder)</span></label>
+                  {matrices.map((m, idx) => (
+                    <div
+                      key={m._id}
+                      className="reorder-item"
+                      draggable
+                      onDragStart={() => { matrixDragItem.current = idx; }}
+                      onDragEnter={() => { matrixDragOver.current = idx; }}
+                      onDragOver={e => e.preventDefault()}
+                      onDragEnd={handleMatrixDragEnd}
+                    >
+                      <span className="drag-dots reorder-drag-handle">⠿</span>
+                      <span className="reorder-item-name">{idx + 1}. {m.name}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
-          <div className="form-actions" style={{ marginTop: 16 }}>
-            <button className="btn-save" onClick={startNew}>Create New Matrix</button>
-          </div>
         </div>
       )}
 

@@ -7,33 +7,72 @@ import FilterTags from './FilterTags';
 import DocumentView from './DocumentView';
 
 function WelcomePage() {
-  return (
-    <div className="welcome-page">
-      <div className="welcome-icon">
-        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
-          <polyline points="10 9 9 9 8 9" />
-        </svg>
+  const [stats, setStats] = useState({ productTypes: 0, combinations: 0, compatibility: 0, cloudInfo: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [configRes, compatRes, cloudRes] = await Promise.all([
+          fetch('/api/product-config').then(r => r.json()),
+          fetch('/api/compatibility').then(r => r.json()),
+          fetch('/api/cloud-info').then(r => r.json()),
+        ]);
+        const configs = configRes.configs || [];
+        setStats({
+          productTypes: configs.length,
+          combinations: configs.reduce((sum, c) => sum + (c.combinations || []).length, 0),
+          compatibility: (compatRes.matrices || []).length,
+          cloudInfo: (cloudRes.items || []).length,
+        });
+      } catch (_) {}
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="welcome-page">
+        <p style={{ color: 'var(--text-muted)' }}>Loading...</p>
       </div>
-      <h1 className="welcome-title">Migration Feature Docs</h1>
-      <p className="welcome-subtitle">
-        Select a product type and combination from the sidebar to view the supported features and documentation.
-      </p>
-      <div className="welcome-steps">
-        <div className="welcome-step">
-          <span className="welcome-step-num">1</span>
-          <span>Choose a <strong>Product Type</strong> (Message, Mail, Content)</span>
+    );
+  }
+
+  return (
+    <div className="welcome-page welcome-page-dynamic">
+      <div className="welcome-hero">
+        <div className="welcome-icon">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
         </div>
-        <div className="welcome-step">
-          <span className="welcome-step-num">2</span>
-          <span>Select a <strong>Combination</strong> (e.g. Slack to Teams)</span>
+        <h1 className="welcome-title">Migration Feature Documentation</h1>
+        <p className="welcome-subtitle">
+          Select a product type, compatibility matrix, or cloud document from the sidebar to get started.
+        </p>
+      </div>
+
+      <div className="welcome-stats">
+        <div className="welcome-stat-card">
+          <span className="welcome-stat-num">{stats.productTypes}</span>
+          <span className="welcome-stat-label">Product Types</span>
         </div>
-        <div className="welcome-step">
-          <span className="welcome-step-num">3</span>
-          <span>View the <strong>Features</strong> with descriptions and screenshots</span>
+        <div className="welcome-stat-card">
+          <span className="welcome-stat-num">{stats.combinations}</span>
+          <span className="welcome-stat-label">Combinations</span>
+        </div>
+        <div className="welcome-stat-card">
+          <span className="welcome-stat-num">{stats.compatibility}</span>
+          <span className="welcome-stat-label">Matrices</span>
+        </div>
+        <div className="welcome-stat-card">
+          <span className="welcome-stat-num">{stats.cloudInfo}</span>
+          <span className="welcome-stat-label">Cloud Docs</span>
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import html2pdf from 'html2pdf.js';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
 import { useProductConfig } from '../ProductConfigContext';
+import { showToast } from './Toast';
 import CustomSelect from './CustomSelect';
 
 function getExportFilename(productType, combination, ext) {
@@ -64,8 +65,6 @@ function ExportPage({ onBack }) {
   const [productType, setProductType] = useState('');
   const [combination, setCombination] = useState('');
   const [downloading, setDownloading] = useState('');
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [previewFeatures, setPreviewFeatures] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const printRef = useRef(null);
@@ -83,45 +82,39 @@ function ExportPage({ onBack }) {
   };
 
   const loadPreview = async () => {
-    setError('');
-    setSuccessMsg('');
     setLoadingPreview(true);
     try {
       const features = await fetchData();
       if (features.length === 0) {
-        setError('No features found for the selected filters.');
+        showToast('No features found for the selected filters.', 'error');
         setPreviewFeatures(null);
       } else {
         setPreviewFeatures(features);
       }
     } catch (err) {
-      setError('Failed to load features: ' + err.message);
+      showToast('Failed to load features: ' + err.message, 'error');
     }
     setLoadingPreview(false);
   };
 
   const resetPreview = () => {
     setPreviewFeatures(null);
-    setError('');
-    setSuccessMsg('');
   };
 
   const downloadPDF = async () => {
     setDownloading('pdf');
-    setError('');
-    setSuccessMsg('');
     try {
       let features = previewFeatures;
       if (!features) {
         features = await fetchData();
-        if (features.length === 0) { setError('No features found.'); setDownloading(''); return; }
+        if (features.length === 0) { showToast('No features found.', 'error'); setDownloading(''); return; }
         setPreviewFeatures(features);
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const element = printRef.current;
-      if (!element) { setError('Could not generate PDF.'); setDownloading(''); return; }
+      if (!element) { showToast('Could not generate PDF.', 'error'); setDownloading(''); return; }
 
       const filename = getExportFilename(productType, combination, 'pdf');
       await html2pdf().set({
@@ -133,23 +126,20 @@ function ExportPage({ onBack }) {
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
       }).from(element).save();
 
-      setSuccessMsg('PDF downloaded!');
-      setTimeout(() => setSuccessMsg(''), 3000);
+      showToast('PDF downloaded!');
     } catch (err) {
-      setError('PDF download failed: ' + err.message);
+      showToast('PDF download failed: ' + err.message, 'error');
     }
     setDownloading('');
   };
 
   const downloadDOCX = async () => {
     setDownloading('docx');
-    setError('');
-    setSuccessMsg('');
     try {
       let features = previewFeatures;
       if (!features) {
         features = await fetchData();
-        if (features.length === 0) { setError('No features found.'); setDownloading(''); return; }
+        if (features.length === 0) { showToast('No features found.', 'error'); setDownloading(''); return; }
         setPreviewFeatures(features);
       }
 
@@ -158,10 +148,9 @@ function ExportPage({ onBack }) {
       const blob = await Packer.toBlob(docFile);
       saveAs(blob, getExportFilename(productType, combination, 'docx'));
 
-      setSuccessMsg('DOCX downloaded!');
-      setTimeout(() => setSuccessMsg(''), 3000);
+      showToast('DOCX downloaded!');
     } catch (err) {
-      setError('DOCX download failed: ' + err.message);
+      showToast('DOCX download failed: ' + err.message, 'error');
     }
     setDownloading('');
   };
@@ -224,8 +213,6 @@ function ExportPage({ onBack }) {
           </div>
         )}
 
-        {error && <div className="form-error">{error}</div>}
-        {successMsg && <div className="form-success">{successMsg}</div>}
 
         {ready && (
           <div className="form-actions">

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import FeatureCard from './FeatureCard';
 import { useProductConfig } from '../ProductConfigContext';
 import CustomSelect from './CustomSelect';
+import { showToast } from './Toast';
 
 function getEditCacheKey(productType, scope, combination) {
   return `edit_cache_${productType}_${scope}_${combination}`;
@@ -106,8 +107,8 @@ function MoveButtons({ index, total, onMove, disabled }) {
 function EditFeatureTab({ refreshKey, onChanged }) {
   const { productTypes, combinationsByProduct, configs, refresh } = useProductConfig();
 
-  const [scope, setScope] = useState('');
   const [productType, setProductType] = useState('');
+  const [scope, setScope] = useState('');
   const [combination, setCombination] = useState('');
   const [features, setFeatures] = useState([]);
   const [originalFeatures, setOriginalFeatures] = useState([]);
@@ -115,18 +116,18 @@ function EditFeatureTab({ refreshKey, onChanged }) {
   const [saving, setSaving] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [editingIds, setEditingIds] = useState(new Set());
   const [deletePTConfirm, setDeletePTConfirm] = useState(false);
   const [deleteComboConfirm, setDeleteComboConfirm] = useState(false);
+  const [showPTReorder, setShowPTReorder] = useState(false);
+  const [showComboReorder, setShowComboReorder] = useState(false);
 
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
-  const ptSectionRef = useRef(null);
+  const scopeSectionRef = useRef(null);
   const comboSectionRef = useRef(null);
   const featuresSectionRef = useRef(null);
 
@@ -136,19 +137,19 @@ function EditFeatureTab({ refreshKey, onChanged }) {
   const comboDragOver = useRef(null);
 
   const combinations = productType ? (combinationsByProduct[productType] || []) : [];
-  const readyToFetch = scope && productType && (combinations.length === 0 || combination);
+  const readyToFetch = productType && scope && (combinations.length === 0 || combination);
 
   useEffect(() => {
-    if (scope && ptSectionRef.current) {
-      ptSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [scope]);
-
-  useEffect(() => {
-    if (productType && comboSectionRef.current) {
-      comboSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (productType && scopeSectionRef.current) {
+      scopeSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [productType]);
+
+  useEffect(() => {
+    if (scope && comboSectionRef.current) {
+      comboSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [scope]);
 
   useEffect(() => {
     if (combination && featuresSectionRef.current) {
@@ -177,7 +178,6 @@ function EditFeatureTab({ refreshKey, onChanged }) {
 
   const fetchFiltered = async () => {
     setLoading(true);
-    setError('');
     setEditingIds(new Set());
     const cacheKey = getEditCacheKey(productType, scope, combination);
     try {
@@ -202,7 +202,7 @@ function EditFeatureTab({ refreshKey, onChanged }) {
         setOriginalFeatures(JSON.parse(JSON.stringify(withMeta)));
         setIsOffline(true);
       } else {
-        setError('Failed to load features: ' + err.message);
+        showToast('Failed to load features: ' + err.message, 'error');
       }
     }
     setLoading(false);
@@ -250,13 +250,11 @@ function EditFeatureTab({ refreshKey, onChanged }) {
   const handleSaveAll = async () => {
     const dirtyFeatures = features.filter(f => f._dirty);
     if (dirtyFeatures.length === 0) {
-      setError('No changes to save.');
+      showToast('No changes to save.', 'error');
       return;
     }
 
     setSaving(true);
-    setError('');
-    setSuccessMsg('');
     let savedCount = 0;
 
     try {
@@ -314,19 +312,18 @@ function EditFeatureTab({ refreshKey, onChanged }) {
       if (renameCount > 0) {
         msg += ` ${renameCount} family name${renameCount !== 1 ? 's' : ''} renamed across all features.`;
       }
-      setSuccessMsg(msg);
+      showToast(msg);
       if (onChanged) onChanged();
       setEditingIds(new Set());
       fetchFiltered();
     } catch (err) {
-      setError('Update failed: ' + err.message);
+      showToast('Update failed: ' + err.message, 'error');
     }
 
     setSaving(false);
   };
 
   const handleDelete = async (id) => {
-    setError('');
     try {
       await fetch(`/api/features/${id}`, { method: 'DELETE' });
       setFeatures(prev => prev.filter(f => f.id !== id));
@@ -337,11 +334,10 @@ function EditFeatureTab({ refreshKey, onChanged }) {
         return next;
       });
       setDeleteConfirm(null);
-      setSuccessMsg('Feature deleted.');
-      setTimeout(() => setSuccessMsg(''), 3000);
+      showToast('Feature deleted successfully.');
       if (onChanged) onChanged();
     } catch (err) {
-      setError('Delete failed: ' + err.message);
+      showToast('Delete failed: ' + err.message, 'error');
     }
   };
 
@@ -353,10 +349,10 @@ function EditFeatureTab({ refreshKey, onChanged }) {
       setFeatures([]);
       setOriginalFeatures([]);
       setDeletePTConfirm(false);
-      setSuccessMsg(`All ${scopeLabel} features for "${productType}" deleted. The product type itself is preserved.`);
+      showToast(`All ${scopeLabel} features for "${productType}" deleted.`);
       if (onChanged) onChanged();
     } catch (err) {
-      setError('Delete failed: ' + err.message);
+      showToast('Delete failed: ' + err.message, 'error');
     }
   };
 
@@ -368,10 +364,10 @@ function EditFeatureTab({ refreshKey, onChanged }) {
       setFeatures([]);
       setOriginalFeatures([]);
       setDeleteComboConfirm(false);
-      setSuccessMsg(`All ${scopeLabel} features for "${combination}" deleted. The combination itself is preserved.`);
+      showToast(`All ${scopeLabel} features for "${combination}" deleted.`);
       if (onChanged) onChanged();
     } catch (err) {
-      setError('Delete failed: ' + err.message);
+      showToast('Delete failed: ' + err.message, 'error');
     }
   };
 
@@ -388,10 +384,9 @@ function EditFeatureTab({ refreshKey, onChanged }) {
       });
       if (!res.ok) throw new Error('Reorder failed');
       await refresh();
-      setSuccessMsg('Product type order updated.');
-      setTimeout(() => setSuccessMsg(''), 2000);
+      showToast('Product type order updated.');
     } catch (err) {
-      setError('Reorder failed: ' + err.message);
+      showToast('Reorder failed: ' + err.message, 'error');
     }
   };
 
@@ -418,10 +413,9 @@ function EditFeatureTab({ refreshKey, onChanged }) {
       });
       if (!res.ok) throw new Error('Reorder failed');
       await refresh();
-      setSuccessMsg('Combination order updated.');
-      setTimeout(() => setSuccessMsg(''), 2000);
+      showToast('Combination order updated.');
     } catch (err) {
-      setError('Reorder failed: ' + err.message);
+      showToast('Reorder failed: ' + err.message, 'error');
     }
   };
 
@@ -448,11 +442,10 @@ function EditFeatureTab({ refreshKey, onChanged }) {
         throw new Error(data.error);
       }
       setOriginalFeatures(JSON.parse(JSON.stringify(reordered)));
-      setSuccessMsg('Order updated.');
-      setTimeout(() => setSuccessMsg(''), 2000);
+      showToast('Order updated.');
       if (onChanged) onChanged();
     } catch (err) {
-      setError('Reorder failed: ' + err.message);
+      showToast('Reorder failed: ' + err.message, 'error');
       fetchFiltered();
     }
     setReordering(false);
@@ -503,84 +496,93 @@ function EditFeatureTab({ refreshKey, onChanged }) {
     <div className="scope-form">
       <h2 className="scope-form-title">Edit Features</h2>
 
-      {successMsg && <div className="form-success">{successMsg}</div>}
-
+      {/* Step 1: Product Type */}
       <div className="form-section">
         <div className="form-group">
-          <label>Scope Status <span className="required">*</span></label>
-          <CustomSelect
-            value={scope}
-            onChange={(e) => { setScope(e.target.value); setSuccessMsg(''); }}
-            options={[
-              { value: 'inscope', label: 'In Scope' },
-              { value: 'outscope', label: 'Out of Scope' },
-            ]}
-            placeholder="-- Select Scope --"
-          />
+          <label>Product Type <span className="required">*</span></label>
+          <div className="select-with-action">
+            <CustomSelect
+              value={productType}
+              onChange={(e) => { setProductType(e.target.value); setScope(''); setCombination(''); setDeletePTConfirm(false); }}
+              options={productTypes.map(pt => ({ value: pt, label: pt }))}
+              placeholder="-- Select Product Type --"
+            />
+            {productType && scope && !deletePTConfirm && (
+              <button className="btn-delete-inline" onClick={() => setDeletePTConfirm(true)} title={`Delete all ${scope === 'inscope' ? 'In Scope' : 'Out of Scope'} features for this product type`}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Delete
+              </button>
+            )}
+          </div>
         </div>
+        {deletePTConfirm && (
+          <div className="delete-confirm-bar">
+            <span className="delete-confirm-msg">
+              Delete all <strong>{scope === 'inscope' ? 'In Scope' : 'Out of Scope'}</strong> features for <strong>{productType}</strong>?
+              <br /><small>Only features in this scope will be removed. The product type itself will remain.</small>
+            </span>
+            <button className="btn-yes" onClick={handleDeleteProductType}>Yes, Delete</button>
+            <button className="btn-no" onClick={() => setDeletePTConfirm(false)}>Cancel</button>
+          </div>
+        )}
+
+        {productTypes.length > 1 && (
+          <div className="reorder-toggle-section">
+            <button className="btn-reorder-toggle" onClick={() => setShowPTReorder(prev => !prev)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><polyline points="10 3 8 6 6 3"/><polyline points="14 21 16 18 18 21"/></svg>
+              {showPTReorder ? 'Hide Reorder' : 'Reorder Product Types'}
+            </button>
+            {showPTReorder && (
+              <div className="reorder-list">
+                <label className="reorder-label">Product Type Order <span className="drag-hint-inline">(drag to reorder)</span></label>
+                {configs.map((c, idx) => (
+                  <div
+                    key={c.id}
+                    className={`reorder-item${c.name === productType ? ' reorder-item-active' : ''}`}
+                    draggable
+                    onDragStart={() => { ptDragItem.current = idx; }}
+                    onDragEnter={() => { ptDragOver.current = idx; }}
+                    onDragOver={e => e.preventDefault()}
+                    onDragEnd={handlePTDragEnd}
+                  >
+                    <span className="drag-dots reorder-drag-handle">⠿</span>
+                    <span className="reorder-item-name">{idx + 1}. {c.name}</span>
+                    <MoveButtons index={idx} total={configs.length} onMove={handleMoveProductType} disabled={false} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {scope && (
-        <div className="form-section" ref={ptSectionRef}>
+      {/* Step 2: Scope (shown after product type) */}
+      {productType && (
+        <div className="form-section" ref={scopeSectionRef}>
           <div className="form-group">
-            <label>Product Type <span className="required">*</span></label>
-            <div className="select-with-action">
-              <CustomSelect
-                value={productType}
-                onChange={(e) => { setProductType(e.target.value); setCombination(''); setSuccessMsg(''); setDeletePTConfirm(false); }}
-                options={productTypes.map(pt => ({ value: pt, label: pt }))}
-                placeholder="-- Select Product Type --"
-              />
-              {productType && !deletePTConfirm && (
-                <button className="btn-delete-inline" onClick={() => setDeletePTConfirm(true)} title={`Delete all ${scope === 'inscope' ? 'In Scope' : 'Out of Scope'} features for this product type`}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                  Delete
-                </button>
-              )}
-            </div>
+            <label>Scope Status <span className="required">*</span></label>
+            <CustomSelect
+              value={scope}
+              onChange={(e) => { setScope(e.target.value); setCombination(''); }}
+              options={[
+                { value: 'inscope', label: 'In Scope' },
+                { value: 'outscope', label: 'Out of Scope' },
+              ]}
+              placeholder="-- Select Scope --"
+            />
           </div>
-          {deletePTConfirm && (
-            <div className="delete-confirm-bar">
-              <span className="delete-confirm-msg">
-                Delete all <strong>{scope === 'inscope' ? 'In Scope' : 'Out of Scope'}</strong> features for <strong>{productType}</strong>?
-                <br /><small>Only features in this scope will be removed. The product type itself will remain.</small>
-              </span>
-              <button className="btn-yes" onClick={handleDeleteProductType}>Yes, Delete</button>
-              <button className="btn-no" onClick={() => setDeletePTConfirm(false)}>Cancel</button>
-            </div>
-          )}
-
-          {productTypes.length > 1 && (
-            <div className="reorder-list">
-              <label className="reorder-label">Product Type Order <span className="drag-hint-inline">(drag to reorder)</span></label>
-              {configs.map((c, idx) => (
-                <div
-                  key={c.id}
-                  className={`reorder-item${c.name === productType ? ' reorder-item-active' : ''}`}
-                  draggable
-                  onDragStart={() => { ptDragItem.current = idx; }}
-                  onDragEnter={() => { ptDragOver.current = idx; }}
-                  onDragOver={e => e.preventDefault()}
-                  onDragEnd={handlePTDragEnd}
-                >
-                  <span className="drag-dots reorder-drag-handle">⠿</span>
-                  <span className="reorder-item-name">{idx + 1}. {c.name}</span>
-                  <MoveButtons index={idx} total={configs.length} onMove={handleMoveProductType} disabled={false} />
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
-      {scope && productType && combinations.length > 0 && (
+      {/* Step 3: Combination (shown after scope, only if combinations exist) */}
+      {productType && scope && combinations.length > 0 && (
         <div className="form-section" ref={comboSectionRef}>
           <div className="form-group">
             <label>Combination <span className="required">*</span></label>
             <div className="select-with-action">
               <CustomSelect
                 value={combination}
-                onChange={(e) => { setCombination(e.target.value); setSuccessMsg(''); setDeleteComboConfirm(false); }}
+                onChange={(e) => { setCombination(e.target.value); setDeleteComboConfirm(false); }}
                 options={combinations.map(c => ({ value: c, label: c }))}
                 placeholder="-- Select Combination --"
               />
@@ -604,28 +606,37 @@ function EditFeatureTab({ refreshKey, onChanged }) {
           )}
 
           {combinations.length > 1 && (
-            <div className="reorder-list">
-              <label className="reorder-label">Combination Order <span className="drag-hint-inline">(drag to reorder)</span></label>
-              {combinations.map((c, idx) => (
-                <div
-                  key={c}
-                  className={`reorder-item${c === combination ? ' reorder-item-active' : ''}`}
-                  draggable
-                  onDragStart={() => { comboDragItem.current = idx; }}
-                  onDragEnter={() => { comboDragOver.current = idx; }}
-                  onDragOver={e => e.preventDefault()}
-                  onDragEnd={handleComboDragEnd}
-                >
-                  <span className="drag-dots reorder-drag-handle">⠿</span>
-                  <span className="reorder-item-name">{idx + 1}. {c}</span>
-                  <MoveButtons index={idx} total={combinations.length} onMove={handleMoveCombination} disabled={false} />
+            <div className="reorder-toggle-section">
+              <button className="btn-reorder-toggle" onClick={() => setShowComboReorder(prev => !prev)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><polyline points="10 3 8 6 6 3"/><polyline points="14 21 16 18 18 21"/></svg>
+                {showComboReorder ? 'Hide Reorder' : 'Reorder Combinations'}
+              </button>
+              {showComboReorder && (
+                <div className="reorder-list">
+                  <label className="reorder-label">Combination Order <span className="drag-hint-inline">(drag to reorder)</span></label>
+                  {combinations.map((c, idx) => (
+                    <div
+                      key={c}
+                      className={`reorder-item${c === combination ? ' reorder-item-active' : ''}`}
+                      draggable
+                      onDragStart={() => { comboDragItem.current = idx; }}
+                      onDragEnter={() => { comboDragOver.current = idx; }}
+                      onDragOver={e => e.preventDefault()}
+                      onDragEnd={handleComboDragEnd}
+                    >
+                      <span className="drag-dots reorder-drag-handle">⠿</span>
+                      <span className="reorder-item-name">{idx + 1}. {c}</span>
+                      <MoveButtons index={idx} total={combinations.length} onMove={handleMoveCombination} disabled={false} />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
       )}
 
+      {/* Step 4: Features list */}
       {readyToFetch && (
         <div ref={featuresSectionRef}>
           <div className="form-section-header">
@@ -644,8 +655,6 @@ function EditFeatureTab({ refreshKey, onChanged }) {
               Server is offline — showing cached data. Save and delete are unavailable until the server is back.
             </div>
           )}
-
-          {error && <div className="form-error">{error}</div>}
 
           {loading ? (
             <div className="saved-loading">Loading features...</div>

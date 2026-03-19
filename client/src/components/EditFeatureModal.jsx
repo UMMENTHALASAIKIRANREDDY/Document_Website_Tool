@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import FeatureCard from './FeatureCard';
+import { showToast } from './Toast';
 
 function EditFeatureModal({ feature, onClose, onSave }) {
   const [editData, setEditData] = useState({ ...feature, _pendingFiles: [], _localPreviews: [] });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
 
   const handleChange = (index, updated) => {
     setEditData(updated);
@@ -22,12 +22,11 @@ function EditFeatureModal({ feature, onClose, onSave }) {
 
   const handleSave = async () => {
     if (!editData.name.trim()) {
-      setError('Feature name is required.');
+      showToast('Feature name is required.', 'error');
       return;
     }
 
     setSaving(true);
-    setError('');
 
     try {
       let screenshotPaths = [...(editData.screenshots || [])];
@@ -51,7 +50,7 @@ function EditFeatureModal({ feature, onClose, onSave }) {
 
       onSave();
     } catch (err) {
-      setError('Update failed: ' + err.message);
+      showToast('Update failed: ' + err.message, 'error');
     }
 
     setSaving(false);
@@ -81,7 +80,6 @@ function EditFeatureModal({ feature, onClose, onSave }) {
             showRemove={false}
           />
 
-          {error && <div className="form-error">{error}</div>}
         </div>
 
         <div className="modal-footer">

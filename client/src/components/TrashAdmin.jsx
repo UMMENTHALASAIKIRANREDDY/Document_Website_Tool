@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
+import { showToast } from './Toast';
 
 function TrashAdmin({ onChanged }) {
   const [trash, setTrash] = useState({ features: [], productConfigs: [], matrices: [], cloudInfos: [] });
   const [loading, setLoading] = useState(true);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [error, setError] = useState('');
   const [permanentDelete, setPermanentDelete] = useState(null);
   const [deleteInput, setDeleteInput] = useState('');
 
@@ -17,57 +16,49 @@ function TrashAdmin({ onChanged }) {
       const data = await res.json();
       setTrash(data);
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const showSuccess = (msg) => {
-    setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(''), 3000);
-  };
-
   const handleRestore = async (type, id, name) => {
-    setError('');
     try {
       const res = await fetch(`/api/trash/restore/${type}/${id}`, { method: 'PUT' });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      showSuccess(`"${name}" restored successfully!`);
+      showToast(`"${name}" restored successfully!`);
       await fetchTrash();
       if (onChanged) onChanged();
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     }
   };
 
   const handlePermanentDelete = async () => {
     if (!permanentDelete) return;
     if (deleteInput !== 'DELETE') {
-      setError('Please type DELETE to confirm');
+      showToast('Please type DELETE to confirm', 'error');
       return;
     }
-    setError('');
     const { type, id, name } = permanentDelete;
     try {
       const res = await fetch(`/api/trash/permanent/${type}/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      showSuccess(`"${name}" permanently deleted!`);
+      showToast(`"${name}" permanently deleted!`);
       setPermanentDelete(null);
       setDeleteInput('');
       await fetchTrash();
       if (onChanged) onChanged();
     } catch (err) {
-      setError(err.message);
+      showToast(err.message, 'error');
     }
   };
 
   const cancelPermanentDelete = () => {
     setPermanentDelete(null);
     setDeleteInput('');
-    setError('');
   };
 
   const formatDate = (dateStr) => {
@@ -111,9 +102,6 @@ function TrashAdmin({ onChanged }) {
         <h3>Trash</h3>
         <span className="trash-count">{totalItems} item{totalItems !== 1 ? 's' : ''} in trash</span>
       </div>
-
-      {successMsg && <div className="success-msg">{successMsg}</div>}
-      {error && <div className="error-msg">{error}</div>}
 
       {permanentDelete && (
         <div className="permanent-delete-modal">

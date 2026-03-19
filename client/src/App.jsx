@@ -7,6 +7,7 @@ import CompatibilityTable from './components/CompatibilityTable';
 import CloudInfoPage from './components/CloudInfoPage';
 import AdminPage from './components/AdminPage';
 import AdminLogin from './components/AdminLogin';
+import ToastContainer from './components/Toast';
 
 function AdminRoute({ darkMode, setDarkMode }) {
   const [token, setToken] = useState(sessionStorage.getItem('admin_token') || '');
@@ -93,6 +94,7 @@ function App() {
 
   return (
     <div className={`app ${darkMode ? 'dark' : ''}`}>
+      <ToastContainer />
       <Routes>
         <Route
           path="/admin"
