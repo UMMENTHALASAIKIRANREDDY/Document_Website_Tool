@@ -79,58 +79,62 @@ const screenshotsDir = path.join(assetsDir, 'screenshots');
 app.use('/assets', express.static(assetsDir));
 
 let upload;
-const useCloudinary = process.env.CLOUDINARY_CLOUD_NAME
-  && process.env.CLOUDINARY_API_KEY
-  && process.env.CLOUDINARY_API_SECRET
-  && process.env.CLOUDINARY_CLOUD_NAME !== 'your_cloud_name';
 
-if (useCloudinary) {
-  const { v2: cloudinary } = require('cloudinary');
-  const { CloudinaryStorage } = require('multer-storage-cloudinary');
+// --- Cloudinary storage (commented out — uncomment .env vars + this block to re-enable) ---
+// const useCloudinary = process.env.CLOUDINARY_CLOUD_NAME
+//   && process.env.CLOUDINARY_API_KEY
+//   && process.env.CLOUDINARY_API_SECRET
+//   && process.env.CLOUDINARY_CLOUD_NAME !== 'your_cloud_name';
+//
+// if (useCloudinary) {
+//   const { v2: cloudinary } = require('cloudinary');
+//   const { CloudinaryStorage } = require('multer-storage-cloudinary');
+//
+//   cloudinary.config({
+//     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//     api_key: process.env.CLOUDINARY_API_KEY,
+//     api_secret: process.env.CLOUDINARY_API_SECRET,
+//   });
+//
+//   const cloudinaryStorage = new CloudinaryStorage({
+//     cloudinary,
+//     params: {
+//       folder: 'docproject-screenshots',
+//       allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+//       resource_type: 'image',
+//     },
+//   });
+//
+//   upload = multer({ storage: cloudinaryStorage });
+//   console.log('Using Cloudinary for image storage');
+// } else { ... }
+// --- End Cloudinary block ---
 
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-  });
+const localStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const productType = (req.body.productType || 'general').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+    const combination = (req.body.combination || 'general').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+    const destDir = path.join(screenshotsDir, productType, combination);
+    fs.mkdirSync(destDir, { recursive: true });
+    cb(null, destDir);
+  },
+  filename: (req, file, cb) => {
+    const featureName = req.body.featureName || 'screenshot';
+    const safe = featureName.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+    const ext = path.extname(file.originalname) || '.png';
+    const idx = req.fileIndex = (req.fileIndex || 0) + 1;
+    cb(null, `${safe}_${idx}_${Date.now()}${ext}`);
+  },
+});
 
-  const cloudinaryStorage = new CloudinaryStorage({
-    cloudinary,
-    params: {
-      folder: 'docproject-screenshots',
-      allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-      resource_type: 'image',
-    },
-  });
-
-  upload = multer({ storage: cloudinaryStorage });
-  console.log('Using Cloudinary for image storage');
-} else {
-  const localStorage = multer.diskStorage({
-    destination: screenshotsDir,
-    filename: (req, file, cb) => {
-      const featureName = req.body.featureName || '';
-      const ext = path.extname(file.originalname) || '.png';
-      if (featureName) {
-        const safe = featureName.replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
-        const idx = req.fileIndex = (req.fileIndex || 0) + 1;
-        cb(null, `${safe}_screenshot_${idx}_${Date.now()}${ext}`);
-      } else {
-        const safeName = decodeURIComponent(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
-        cb(null, `${Date.now()}-${safeName}`);
-      }
-    },
-  });
-
-  upload = multer({
-    storage: localStorage,
-    fileFilter: (req, file, cb) => {
-      if (file.mimetype.startsWith('image/')) cb(null, true);
-      else cb(new Error('Only image files allowed'));
-    },
-  });
-  console.log('Using local disk for image storage (set CLOUDINARY_ env vars for cloud storage)');
-}
+upload = multer({
+  storage: localStorage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files allowed'));
+  },
+});
+console.log('Using local disk for image storage (organized by productType/combination)');
 
 // --------------- Data Migration Helper ---------------
 
@@ -510,8 +514,12 @@ app.post('/api/screenshots', upload.array('screenshots', 20), (req, res) => {
       return res.status(400).json({ error: 'No files uploaded' });
     }
     const paths = req.files.map(f => {
-      if (f.path && f.path.startsWith('http')) return f.path;
-      return `/assets/screenshots/${f.filename}`;
+      // --- Cloudinary path (commented out) ---
+      // if (f.path && f.path.startsWith('http')) return f.path;
+      // return `/assets/screenshots/${f.filename}`;
+      // --- End Cloudinary path ---
+      const relativePath = path.relative(assetsDir, f.path).replace(/\\/g, '/');
+      return `/assets/${relativePath}`;
     });
     res.json({ success: true, paths });
   } catch (err) {
@@ -746,15 +754,28 @@ app.delete('/api/trash/permanent/:type/:id', async (req, res) => {
     if (!doc) return res.status(404).json({ error: 'Not found' });
     if (!doc.isDeleted) return res.status(400).json({ error: 'Item is not in trash' });
 
-    if (type === 'feature' && useCloudinary) {
-      const { v2: cloudinary } = require('cloudinary');
-      for (const url of (doc.screenshots || [])) {
-        if (url.includes('cloudinary.com')) {
-          const parts = url.split('/');
-          const filenameWithExt = parts.pop();
-          const folder = parts.pop();
-          const publicId = `${folder}/${filenameWithExt.split('.')[0]}`;
-          await cloudinary.uploader.destroy(publicId).catch(() => {});
+    // --- Cloudinary cleanup (commented out — uncomment to re-enable with Cloudinary) ---
+    // if (type === 'feature' && useCloudinary) {
+    //   const { v2: cloudinary } = require('cloudinary');
+    //   for (const url of (doc.screenshots || [])) {
+    //     if (url.includes('cloudinary.com')) {
+    //       const parts = url.split('/');
+    //       const filenameWithExt = parts.pop();
+    //       const folder = parts.pop();
+    //       const publicId = `${folder}/${filenameWithExt.split('.')[0]}`;
+    //       await cloudinary.uploader.destroy(publicId).catch(() => {});
+    //     }
+    //   }
+    // }
+    // --- End Cloudinary cleanup ---
+
+    if (type === 'feature') {
+      for (const screenshotPath of (doc.screenshots || [])) {
+        if (screenshotPath.startsWith('/assets/')) {
+          const filePath = path.join(__dirname, screenshotPath.replace('/assets/', 'assets/'));
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
         }
       }
     }

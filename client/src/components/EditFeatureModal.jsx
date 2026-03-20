@@ -13,6 +13,9 @@ function EditFeatureModal({ feature, onClose, onSave }) {
   const uploadScreenshots = async (files) => {
     if (!files || files.length === 0) return [];
     const formData = new FormData();
+    formData.append('productType', feature.productType || feature.categorySlug || '');
+    formData.append('combination', feature.combination || '');
+    formData.append('featureName', editData.name || feature.name || '');
     files.forEach(f => formData.append('screenshots', f));
     const res = await fetch('/api/screenshots', { method: 'POST', body: formData });
     const data = await res.json();

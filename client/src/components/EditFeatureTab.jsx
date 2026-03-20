@@ -239,6 +239,8 @@ function EditFeatureTab({ refreshKey, onChanged }) {
   const uploadScreenshots = async (files, featureName) => {
     if (!files || files.length === 0) return [];
     const formData = new FormData();
+    formData.append('productType', productType || '');
+    formData.append('combination', combination || '');
     if (featureName) formData.append('featureName', featureName);
     files.forEach(f => formData.append('screenshots', f));
     const res = await fetch('/api/screenshots', { method: 'POST', body: formData });
